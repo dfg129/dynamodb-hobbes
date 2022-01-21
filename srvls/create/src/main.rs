@@ -10,7 +10,8 @@ use tracing::info;
 
 #[derive(Deserialize, Debug)]
 struct Request {
-    command: String,
+    table_name: String,
+    key_name: String,
 }
 
 #[derive(Serialize, Debug)]
@@ -19,17 +20,23 @@ struct Response {
     msg: String,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .with_ansi(false)
-        .without_time()
-        .init();
+async fn handler(event: LambdaEvent<Request>) -> Result<Response, Error> {
+    let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
+    let config = aws_config::from_env().region(region_provider).load().await;
+    let client = Client::new(&config);
 
-    let func = service_fn(handler);
-    lambda_runtime::run(func).await?;
-    Ok(())
+    info!("[handler-fn] : event is {:?}", event);
+    let table_name = event.payload.table_name;
+    let key_name = event.payload.key_name;
+
+    create_table(&client, &table_name, &key_name).await?;
+
+    let resp = Response {
+        req_id: "1".to_string(), //event.table_name,
+        msg: format!("table  {} created.", table_name),
+    };
+
+    Ok(resp)
 }
 
 async fn create_table(client: &Client, table: &str, key: &str) -> Result<(), Error> {
@@ -71,21 +78,15 @@ async fn create_table(client: &Client, table: &str, key: &str) -> Result<(), Err
     Ok(())
 }
 
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .with_ansi(false)
+        .without_time()
+        .init();
 
-async fn handler(event: LambdaEvent<Request>) -> Result<Response, Error> {
-    let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
-    let config = aws_config::from_env().region(region_provider).load().await;
-    let client = Client::new(&config);
-
-    info!("[handler-fn] : event is {:?}", event);
-    let command = event.payload.command;
-
-    create_table(&client, "test1table", "key1").await?;
-
-    let resp = Response {
-        req_id: event.context.request_id,
-        msg: format!("Command {} executed.", command),
-    };
-
-    Ok(resp)
+    let func = service_fn(handler);
+    lambda_runtime::run(func).await?;
+    Ok(())
 }
