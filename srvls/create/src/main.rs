@@ -1,19 +1,33 @@
-use lambda_runtime::{handler_fn, Context, Error};
-use std::env;
-use log::{debug, error, log_enabled, info, Level};
-use serde_json::{json, Value};
+use lambda_runtime::{service_fn, Error, LambdaEvent};
+use serde::{Deserialize, Serialize};
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_dynamodb::model::{
     AttributeDefinition, KeySchemaElement, KeyType, ProvisionedThroughput, ScalarAttributeType
 };
-use aws_sdk_dynamodb::{Client, Region, PKG_VERSION};
+use aws_sdk_dynamodb::{Client};
 use std::process;
+use tracing::info;
+
+#[derive(Deserialize, Debug)]
+struct Request {
+    command: String,
+}
+
+#[derive(Serialize, Debug)]
+struct Response {
+    req_id: String,
+    msg: String,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    env_logger::init();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .with_ansi(false)
+        .without_time()
+        .init();
 
-    let func = handler_fn(handler);
+    let func = service_fn(handler);
     lambda_runtime::run(func).await?;
     Ok(())
 }
@@ -58,32 +72,20 @@ async fn create_table(client: &Client, table: &str, key: &str) -> Result<(), Err
 }
 
 
-async fn handler(event: Value, _: Context) -> Result<Value, Error> {
+async fn handler(event: LambdaEvent<Request>) -> Result<Response, Error> {
     let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
-    println!("-----   Region secured  -----");
-
     let config = aws_config::from_env().region(region_provider).load().await;
     let client = Client::new(&config);
 
-    println!("-----   Client -----");
+    info!("[handler-fn] : event is {:?}", event);
+    let command = event.payload.command;
 
-    let resp = client.list_tables().send().await?;
+    create_table(&client, "test1table", "key1").await?;
 
-    println!("-----   Tables -----");
+    let resp = Response {
+        req_id: event.context.request_id,
+        msg: format!("Command {} executed.", command),
+    };
 
-    let names= resp.table_names().unwrap_or_default();
-    let len = names.len();
-
-    for name in names {
-        println!(" --  {} -- ", name);
-    }
-
-    let response = format!("**** found some tables ***");
-    log::info!("{}", response);
-
-    println!("and now to create a table");
-    create_table(&client, "newtable2", "justanotherkey").await;
-
-    println!("--- table up ---");
-    Ok(json!({"response": response}))
+    Ok(resp)
 }

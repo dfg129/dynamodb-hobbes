@@ -62,6 +62,7 @@ let fn = new lambda.DockerImageFunction(this, 'dynamodb-create-table', {
         }),
     );
 
+/*
     let fn2 = new lambda.DockerImageFunction(this, 'dynamodb-read-table', {
         description: 'Read from a dynamodb table',
         code: lambda.DockerImageCode.fromImageAsset(  path.join(docker_dir, '/read') ),
@@ -80,7 +81,7 @@ let fn = new lambda.DockerImageFunction(this, 'dynamodb-create-table', {
         }),
     );
 
-/*
+
     let fn3 = new lambda.DockerImageFunction(this, 'dynamodb-write-table', {
         description: 'Write into a dynamodb table',
         code: lambda.DockerImageCode.fromImageAsset( path.join(docker_dir, '/write' )),
